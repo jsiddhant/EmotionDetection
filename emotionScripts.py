@@ -114,6 +114,25 @@ def visualize_image(image):
     DL.display_face(I_uint8)
 
 
+def eval_logistic(w,x):
+    return 1 / (1 + np.exp(-np.dot(w, x)))
+
+
+def update_w_logistic(t, y, x, al, w):
+    update = al * np.dot(t-y, x.T)
+    return w + update
+
+
+def eval_error(t, y):
+    return np.dot(t-y, t-y)
+
+
+def norm_vec(img):
+    img = img.T - img.mean(axis=1)
+    img = (img.T / np.linalg.norm(img, 2, axis=1))
+    return img
+
+
 if __name__ == "__main__":
 
     #########################################################
@@ -128,18 +147,50 @@ if __name__ == "__main__":
     numImgs, height, width = data_img.shape
     cafe = DataSet(data_img, labels)
 
-    # Generate PCA for
-    n_components = 16
-    trainTotal = list(set(cafe.trainHappy + cafe.trainSad))  # Total Training Set
-    trainImages = np.asarray([t.image for t in trainTotal])  # Total Training Image Set
+    # Prep Training Data
 
-    eigFace, _, _ = PCA.PCA(trainImages, n_components)
-    # norm_eig = np.linalg.norm(eigFace, 2, axis=0)
-    eigFace = eigFace.reshape(n_components, height, width)
+    trainTotal = list(set(cafe.trainHappy + cafe.trainSad))
+    trainImages = []  # Total Training Set
+    trainLabels = []  # Total Training Image Set
+    for t in trainTotal:
+        trainImages.append(t.image)
+        trainLabels.append(1.0 if t.emotion == 'h' else 0.0)
+
+    trainImages = np.asarray(trainImages)
+    trainLabels = np.asarray(trainLabels)
+
+    # Prep HoldOut Data
+
+    holdTotal = list(set(cafe.holdHappy + cafe.holdSad))
+    holdImages = []
+    holdLabels = []
+    for t in holdTotal:
+        holdImages.append(t.image)
+        holdLabels.append(1.0 if t.emotion == 'h' else 0.0)
+
+    holdImages = np.asarray(holdImages)
+    holdLabels = np.asarray(holdLabels)
+
+    # Prep Test Data
+
+    testTotal = list(set(cafe.testHappy + cafe.testSad))
+    testImages = []
+    testLabels = []
+    for t in testTotal:
+        testImages.append(t.image)
+        testLabels.append(1.0 if t.emotion == 'h' else 0.0)
+
+    testImages = np.asarray(testImages)
+    testLabels = np.asarray(testLabels)
+
+    # PCA
+    n_components = 16
+    eigComps, _, _ = PCA.PCA(trainImages, n_components)
 
     # Uncomment to show EigenFaces
-    for i in range(0,16):
-        visualize_image(eigFace[i])
+    # eigFace = eigComps.reshape(n_components, height, width)
+    # for i in range(0, 16):
+    #     visualize_image(eigFace[i])
 
     #########################################################
     #########################################################
@@ -147,3 +198,26 @@ if __name__ == "__main__":
     #########################################################
     # PA:1 -- Q.2
     #########################################################
+    eigComps = eigComps[0:10]
+
+    # trainImageVec = trainImages.reshape(len(trainTotal), height*width)
+    trainImageVec = trainImages.reshape(len(trainTotal), height*width)
+    # trainImageVec = (trainImageVec.T / np.linalg.norm(trainImageVec, 2, axis=1)).T
+    trainImageVec = norm_vec(trainImageVec)
+
+    holdImageVec = holdImages.reshape(len(holdTotal), height * width)
+    holdImageVec = norm_vec(holdImageVec)
+
+    x_proj = np.dot(eigComps, trainImageVec.T)
+    x_h_proj = np.dot(eigComps, holdImageVec.T)
+    w = np.random.rand(10)*0.01
+    alpha = 0.01
+
+    for epoch in range(0, 10):
+        y = eval_logistic(w, x_proj)
+        yH = eval_logistic(w, x_h_proj)
+        print("Epoch: " + str(epoch) + " Training Error: " + str(eval_error(trainLabels, y)) + " Val Error: " + str(eval_error(holdLabels, yH)))
+        w = update_w_logistic(trainLabels, y, x_proj, alpha, w)
+    y = eval_logistic(w, x_proj)
+    yH = eval_logistic(w, x_h_proj)
+    print(eigComps.shape)
