@@ -1,6 +1,4 @@
 import numpy as NP
-from scipy import linalg as LA
-from matplotlib import pyplot as MPL
 
 
 def PCA(data_orig, k=6):
