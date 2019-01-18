@@ -98,7 +98,7 @@ class DataItem:
 
 class TrainInstance:
 
-    def __init__(self, dataset, parameter_num= 10, emotionList = ['h','s'], softmax = False):
+    def __init__(self, dataset, parameter_num=10, emotionList=['h','s'], softmax = False):
 
         self.parameter_num = parameter_num
         self.trainError = np.Inf
@@ -109,8 +109,9 @@ class TrainInstance:
         h = dataset.height
         w = dataset.width
         numEmotions = len(emotionList)
-        emotion_dict = {emotionList[i]:i for i in range(0,numEmotions)}
+        emotion_dict = {emotionList[i]:i for i in range(0, numEmotions)}
         self.softmax = softmax
+        self.conf_mat = np.zeros((numEmotions, numEmotions))
 
         # Prep Training Data
         trainTotal = list(set(dataset.trainSet))
@@ -222,6 +223,42 @@ class TrainInstance:
 
             # Implement Graphing of Training and Hold Out Error
 
+    def stochastic_gradient_descent(self, model, epochs):
+
+        x_proj = self.inputTrain
+        x_h_proj = self.inputHold
+
+        idx = [num for num in range(0, len(x_proj))]
+
+        for epoch in range(0, epochs):
+
+            idx = np.random.permutation(idx)
+
+            for ind in idx:
+
+                y = model.eval(x_proj)
+                yH = model.eval(x_h_proj)
+                self.trainError = cross_entropy_loss(self.trainLabels[ind], y[ind])
+                self.holdError = cross_entropy_loss(self.holdLabels, yH)
+                cross_entropy_loss(self.trainLabels[ind], y[ind])
+                print("=========================================================================================")
+                # print("Epoch: " + str(epoch) + " SSE Training Error: " + str(
+                #     eval_error(self.trainLabels, y)) + " SSE Val Error: " + str(eval_error(self.holdLabels, yH)))
+
+                print("Epoch: " + str(epoch) + " Training Error: " + str(
+                    self.trainError) + " Val Error: " + str(self.holdError))
+                print("=========================================================================================")
+                model.early_stopping(cross_entropy_loss(self.holdLabels, yH))
+                model.update_w(self.trainLabels[ind], y[ind], x_proj[:, ind])
+
+            self.trainError = cross_entropy_loss(self.trainLabels, y)
+            self.holdError = cross_entropy_loss(self.holdLabels, yH)
+            self.trainErrorList.append(self.trainError)
+            self.holdErrorList.append(self.holdError)
+
+
+            # Implement Graphing of Training and Hold Out Error
+
     def get_test_error(self, model, softmax = False):
         if softmax:
             count =0
@@ -243,6 +280,13 @@ class TrainInstance:
 
         self.testError = 1 - np.float(correct/count)
 
+    def gen_conf_mat(self, model):
+
+        for i in range(0, len(self.testLabels)):
+            lbl_test = np.round(model.eval(self.inputTest))
+            gtruth = np.argwhere(self.testLabels[i] == 1)[0, 0]
+            pred = np.argmax(lbl_test[i])
+            self.conf_mat[gtruth, pred] = self.conf_mat[gtruth, pred]+1
 
 class LogisticModel:
 
@@ -275,7 +319,7 @@ class SoftmaxModel:
 
     def __init__(self, learningRate, numparams=20, numemotions=6):
 
-        self.w = np.random.rand(numparams, numemotions)
+        self.w = np.random.rand(numparams, numemotions)*0
         self.w_final = self.w
         self.alpha = learningRate
         self.minHoldError = np.Inf
@@ -286,7 +330,8 @@ class SoftmaxModel:
         return (np.exp(ans) / np.sum(np.exp(ans), axis=0)).T
 
     def update_w(self, target, y, x):
-        update = self.alpha * np.dot(x, (target-y))
+        # update = self.alpha * np.dot(x, (target-y))
+        update = self.alpha * np.outer(x, target-y) if y.ndim == 1 else self.alpha * np.dot(x, (target-y))
         self.w = self.w + update
 
     def early_stopping(self, hold_error):
@@ -320,6 +365,8 @@ def show_eigen_faces(eigComps):
 
 def create_train_plot(epochs, train_err, hold_err):
 
+    fig = plt.figure()
+    fig.suptitle('Train and Hold Out Error v/s Epochs')
     ep = [i+1 for i in range(0, epochs)]
     train_err = np.asarray(train_err)
     hold_err = np.asarray(hold_err)
@@ -332,8 +379,8 @@ def create_train_plot(epochs, train_err, hold_err):
     #     plt.plot(ep, train_err[i], '-b')
     #     plt.plot(ep, hold_err[i], '--r')
 
-    epL = [2, 4, 6, 8, 10]
-
+    # epL = [i*2 for i in range(0, int(epochs/2))]
+    epL = [10, 20, 30, 40, 50]
     train_err = np.asarray(train_err)
     hold_err = np.asarray(hold_err)
 
@@ -351,6 +398,20 @@ def create_train_plot(epochs, train_err, hold_err):
     plt.legend(loc='upper right')
     plt.show()
 
+
+def show_conf_mat(conf_mat, emotion_list):
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(conf_mat, interpolation='nearest')
+    fig.colorbar(cax)
+    fig.suptitle('Confusion Matrix')
+    plt.xlabel('Prediction')
+    plt.ylabel('Actual')
+    ax.set_xticklabels([''] + emotionList)
+    ax.set_yticklabels([''] + emotionList)
+
+    plt.show()
 
 def generate_eig_face():
     data_img, labels = DL.load_data()
@@ -431,14 +492,19 @@ if __name__ == "__main__":
     trainingErrorList = []
     holdErrorList = []
     emotionList = ['h', 'a', 's', 'f', 'd', 'm']
+    conf_mat = np.zeros((len(emotionList), len(emotionList)))
 
     for person in peopleList:
         cafe = DataSet(data_img, labels, person, emotionList=emotionList)  # Select Emotions to run for.
-        param_num = 40
-        epochs = 20
+        param_num = 20
+        epochs = 50
+        learning_rate = 7
         softmaxTrain = TrainInstance(cafe, param_num, emotionList=emotionList, softmax=True)  # Select Emotions to run for.
-        softMaxRegress = SoftmaxModel(10e-3, param_num, len(emotionList))
-        softmaxTrain.batch_gradient_descent(softMaxRegress, epochs)
+        softMaxRegress = SoftmaxModel(learning_rate, param_num, len(emotionList))
+        # softmaxTrain.batch_gradient_descent(softMaxRegress, epochs)
+        softmaxTrain.stochastic_gradient_descent(softMaxRegress, epochs)
+        trainingErrorList.append(softmaxTrain.trainErrorList)
+        holdErrorList.append(softmaxTrain.holdErrorList)
 
         softmaxTrain.get_test_error(softMaxRegress, softmax=True)
 
@@ -446,9 +512,13 @@ if __name__ == "__main__":
         print("Test Error is: " + str(softmaxTrain.testError))
         print("===================================================")
         errorList.append(softmaxTrain.testError)
-        print("AVG ERROR: " + str(np.asarray(errorList).mean()))
-    a=1
+        softmaxTrain.gen_conf_mat(softMaxRegress)
+        conf_mat = conf_mat + softmaxTrain.conf_mat
 
+    print("AVG ERROR: " + str(np.asarray(errorList).mean()))
+
+    create_train_plot(epochs, trainingErrorList, holdErrorList)
+    show_conf_mat(conf_mat / len(peopleList), emotionList)
 
     # Uncomment below to show EigenFaces
     # show_eigen_faces(logisticTrain.eigComps)
