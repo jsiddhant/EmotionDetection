@@ -18,7 +18,7 @@ def PCA(data_orig, k=6):
     # subtract mean and divide by standard deviation
     data -= data.mean(axis=0)
 
-    # data = data / (NP.std(data))  # not sure if this is needed
+    data = data / (NP.std(data))
 
     sigma = NP.cov(data)  # sigma symmetric by definition
     evals, evecs = NP.linalg.eigh(sigma)  # eigh faster apparently
