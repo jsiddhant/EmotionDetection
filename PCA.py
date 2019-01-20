@@ -29,13 +29,17 @@ def PCA(data_orig, k=6):
     # select only k first evecs
     evecs = evecs[:, :k]
 
+    evals_temp = evals[:k].reshape(-1, 1)
+    evecs = evecs/evals_temp.T
+
     # print(evecs.shape,data.shape)
 
     # return k first principal components
     # note that there are k vectors, each (m*n)x1
+    # evecs = evecs / evals.reshape(-1, 1)
     pcs = NP.dot(evecs.T, data).T
     # pcs = pcs / (NP.std(pcs))
-    norm_eig = NP.linalg.norm(pcs, 2, axis=0)
-    pcs = pcs / norm_eig
+    # norm_eig = NP.linalg.norm(pcs, 2, axis=0)
+    # pcs = pcs / norm_eig
 
     return pcs.T, evecs, evals
