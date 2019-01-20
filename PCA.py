@@ -26,11 +26,9 @@ def PCA(data_orig, k=6):
     idx = NP.argsort(evals[::-1])  # sort evals from big to small
     evecs = evecs[:, idx]  # sort evecs according to evals
     evals = evals[idx]
+    evecs / evals.T
     # select only k first evecs
     evecs = evecs[:, :k]
-
-    evals_temp = evals[:k].reshape(-1, 1)
-    evecs = evecs/evals_temp.T
 
     # print(evecs.shape,data.shape)
 
